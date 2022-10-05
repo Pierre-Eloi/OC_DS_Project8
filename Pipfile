@@ -1,0 +1,19 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+jupyter = "==1.0.0"
+jupyter-contrib-nbextensions = "==0.5.1"
+jupyter-nbextensions-configurator = "==0.4.1"
+matplotlib = "==3.6.0"
+numpy = "==1.23.3"
+pandas = "==1.5.0"
+scipy = "==1.9.1"
+seaborn = "==0.12.0"
+
+[dev-packages]
+
+[requires]
+python_version = "3.10"
