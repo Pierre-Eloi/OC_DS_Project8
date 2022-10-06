@@ -13,6 +13,7 @@ pandas = "==1.5.0"
 scipy = "==1.9.1"
 seaborn = "==0.12.0"
 pyspark = "*"
+opencv-python = "*"
 
 [dev-packages]
 
