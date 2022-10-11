@@ -2,7 +2,6 @@
 .DS_Store
 
 # IDE (jupyter)
-.ipy
 .ipynb_checkpoints/
 
 # Data
