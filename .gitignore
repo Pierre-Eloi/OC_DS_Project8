@@ -4,6 +4,9 @@
 # IDE (jupyter)
 .ipynb_checkpoints/
 
+# Pyenv
+.python-version
+
 # Data
 dataset/
 
@@ -12,3 +15,4 @@ secrets.txt
 
 # old files
 DS_Project8_ragetly_old.ipynb
+p8_local.ipynb
