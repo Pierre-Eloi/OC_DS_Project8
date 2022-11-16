@@ -6,3 +6,9 @@
 
 # Data
 dataset/
+
+# AWS
+secrets.txt
+
+# old files
+DS_Project8_ragetly_old.ipynb
