@@ -4,15 +4,14 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-numpy = "1.23.4"
-pyspark = "3.3.1"
-pillow = "9.3.0"
 jupyter = "1.0.0"
-opencv-python = "4.5.4.60"
-sagemaker-pyspark = "*"
-awscli = "*"
-pyarrow = "*"
-py4j = "*"
+numpy = "1.23.4"
+pandas = "1.5.1"
+pillow = "9.3.0"
+py4j = "0.10.9.5"
+pyarrow = "10.0.0"
+pyspark = "3.3.1"
+tensorflow = "2.11.0"
 
 [dev-packages]
 
