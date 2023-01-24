@@ -14,8 +14,8 @@
             "spark.executor.cores": "2",
             "spark.driver.memory": "18000M",
             "spark.executor.memory": "18000M",
-            "spark.yarn.driver.memoryOverhead": "3000M",
-            "spark.yarn.executor.memoryOverhead": "3000M",
+            "spark.driver.memoryOverhead": "3000M",
+            "spark.executor.memoryOverhead": "3000M",
             "spark.executor.instances": "5",
             "spark.default.parallelism": "20"
             }
