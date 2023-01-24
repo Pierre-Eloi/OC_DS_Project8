@@ -7,6 +7,9 @@
 # Pyenv
 .python-version
 
+# Secrets
+new_user_credentials-2.csv
+
 # Data
 dataset/
 
@@ -16,3 +19,4 @@ secrets.txt
 # old files
 DS_Project8_ragetly_old.ipynb
 p8_local.ipynb
+P8_tutorial/
