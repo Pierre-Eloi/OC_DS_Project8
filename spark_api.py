@@ -5,20 +5,15 @@
 import os
 import io
 from typing import Iterator
-
 # Import numpy and pandas for data manipulation
 import numpy as np
 import pandas as pd
-
 # image preprocessing
 from PIL import Image
 from tensorflow.keras.preprocessing.image import img_to_array
-
-# Import deep learning models with tensorflow
+# Import deep learning model with tensorflow
 from tensorflow.keras.applications.mobilenet_v2 import MobileNetV2, preprocess_input
-
 # Import pyspark library
-from pyspark import SparkContext
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import regexp_extract, pandas_udf, udf
 from pyspark.sql.types import ArrayType, FloatType
@@ -26,23 +21,23 @@ from pyspark.ml.linalg import Vectors, VectorUDT
 from pyspark.ml.feature import StandardScaler, PCA
 from pyspark.ml import Pipeline
 
+# Create Spark session
 spark = (SparkSession.builder
                      .appName('DS_P8')
-                     .master('local')
                      .config("spark.sql.parquet.writeLegacyFormat", ('true'))
                      .getOrCreate()
         )
 sc = spark.sparkContext
-spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", "1024")
-data_path = 'dataset/local_dataset'
-#root_path = sys.argv[1]
+
+# Define variables
+path = 's3://per-oc-project8/data/'
+data_path = os.path.join(path, 'local_test')
+output_path = os.path.join(path, 'output_parquet')
 model = MobileNetV2(weights='imagenet',
                     include_top=False,
                     input_shape=(224, 224, 3)
                    )
 bc_model_weights = sc.broadcast(model.get_weights())
-file_path = "dataset/results/data_parquet"
-# file_path = s3://per-oc-project8/prep_data.parquet
 
 def load_img(dir_path):
     """
@@ -101,38 +96,48 @@ def featurize_udf(batch_iter: Iterator[pd.Series]) -> Iterator[pd.Series]:
     for s in batch_iter:
         yield featurize_series(model, s)
 
-def get_features(df):
-    """
-    Get image features and save them in a 'features' column.
-    """
-    return df.withColumn('features', featurize_udf('content')) \
-             .select('path', 'category', 'features')
-
-if __name__ == '__main__':
+def main():
     # Load images
     df_img = load_img(data_path)
-    # Get image features and labels
+    n_img = df_img.count()
+    # Get labels
     regex = r'(.*)/(.*[a-zA-Z])(.*)/'
+    df_img = df_img.withColumn('label', regexp_extract('path', regex, 2))
+     # Get image features via transfert learning
     df_features = df_img.select(
-        'path',
-        regexp_extract('path', regex, 2).alias('label'),
+        'label',
         featurize_udf('content').alias('features')
-        )
+    )
     # Transform features to a vector type
     arr_to_vec_udf = udf(lambda a: Vectors.dense(a), VectorUDT())
     df_vec = df_features.select(
-        'path',
         'label',
         arr_to_vec_udf('features').alias('features')
-        )
-    # Run a PCA to reduce output dimension
+    )
+    df_vec.show(5)
+    # Scale data
     scaler = StandardScaler(
+        withMean=True,
+        withStd=False,
         inputCol='features',
         outputCol='scaled_features'
-        )
-    pca = PCA(k=1000, inputCol='scaled_features', outputCol='pca_features')
-    pipeline = Pipeline(stages=[scaler, pca])
-    pipeline_model = pipeline.fit(df_vec)
-    output = pipeline_model.transform(df_vec).select('path', 'label', 'pca_features')
+    )
+    scaler_model = scaler.fit(df_vec)
+    df_scaled = scaler_model.transform(df_vec).select(['label', 'scaled_features'])
+    df_scaled.show(5)
+    # # Run PCA with all components
+    # n_features = 7 * 7 * 1280
+    # n = min(n_img, n_features)
+    # pca = PCA(k=n, inputCol='features', outputCol='pca_features')
+    # pca_model = pca.fit(df_scaled)
+    # # Get the right number of components to keep 95% of the variance
+    # cumsum = np.cumsum(pca_model.explainedVariance)
+    # d = np.argmax(cumsum >= 0.95) + 1
+    # print(f"Number of principal components to keep : {d}")
+    # pca_model.setK(d)
+    # result = pca_model.transform(df_scaled).select('label', 'pca_features')
     # Save results
-    output.write.mode("overwrite").parquet(file_path)
+    df_scaled.write.mode("overwrite").parquet(output_path)   
+
+if __name__ == '__main__':
+    main()
