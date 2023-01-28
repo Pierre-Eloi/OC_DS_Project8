@@ -1,25 +1,7 @@
 #! /usr/bin/env python3
 # coding: utf-8
 
-# Standard libraries
-import os
-import io
-from typing import Iterator
-# Import numpy and pandas for data manipulation
-import numpy as np
-import pandas as pd
-# image preprocessing
-from PIL import Image
-from tensorflow.keras.preprocessing.image import img_to_array
-# Import deep learning model with tensorflow
-from tensorflow.keras.applications.mobilenet_v2 import MobileNetV2, preprocess_input
-# Import pyspark library
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import regexp_extract, pandas_udf, udf
-from pyspark.sql.types import ArrayType, FloatType
-from pyspark.ml.linalg import Vectors, VectorUDT
-from pyspark.ml.feature import StandardScaler, PCA
-from pyspark.ml import Pipeline
 
 # Create Spark session
 spark = (SparkSession.builder
@@ -28,16 +10,30 @@ spark = (SparkSession.builder
                      .getOrCreate()
         )
 sc = spark.sparkContext
+# avoid the "_success" file when saving data
+sc._jsc.hadoopConfiguration().set("mapreduce.fileoutputcommitter.marksuccessfuljobs", "false")
 
-# Define variables
-path = 's3://per-oc-project8/data/'
-data_path = os.path.join(path, 'local_test')
-output_path = os.path.join(path, 'output_parquet')
-model = MobileNetV2(weights='imagenet',
-                    include_top=False,
-                    input_shape=(224, 224, 3)
-                   )
-bc_model_weights = sc.broadcast(model.get_weights())
+import os
+import io
+from typing import Iterator
+import numpy as np
+import pandas as pd
+from PIL import Image
+import scipy
+from sklearn.random_projection import johnson_lindenstrauss_min_dim
+from sklearn.random_projection import SparseRandomProjection
+from tensorflow.keras.preprocessing.image import img_to_array
+from tensorflow.keras.applications.mobilenet_v2 import MobileNetV2, preprocess_input
+from pyspark.sql.functions import regexp_extract, pandas_udf, udf
+from pyspark.sql.types import ArrayType, FloatType
+from pyspark.ml.linalg import Vectors, VectorUDT
+from pyspark.ml.feature import StandardScaler, PCA
+from pyspark.ml import Pipeline
+
+# Define paths
+path = "s3://per-oc-project8/data/"
+data_path = os.path.join(path, "Test")
+result_path = os.path.join(path, "result_parquet")
 
 def load_img(dir_path):
     """
@@ -54,9 +50,7 @@ def model_fn():
     Returns a MobileNetV2 model with top layer removed
     and broadcasted pretrained weights.
     """
-    model = MobileNetV2(weights=None,
-                        include_top=False,
-                        input_shape=(224, 224, 3))
+    model = MobileNetV2(weights=None, include_top=False, input_shape=(224, 224, 3))
     model.set_weights(bc_model_weights.value)
     return model
 
@@ -76,8 +70,8 @@ def featurize_series(model, series):
     -----------    
     Return: a pd.Series of image features
     """
-    input = np.stack(series.map(preprocess_img))
-    preds = model.predict(input)
+    X = np.stack(series.map(preprocess_img))
+    preds = model.predict(X)
     # For some layers, output features will be multi-dimensional tensors.
     # We flatten the feature tensors to vectors for easier storage in Spark DataFrames.
     output = [p.flatten() for p in preds]
@@ -96,48 +90,59 @@ def featurize_udf(batch_iter: Iterator[pd.Series]) -> Iterator[pd.Series]:
     for s in batch_iter:
         yield featurize_series(model, s)
 
-def main():
+def dim_red_series(model, series):
+    """
+    Reduce the dimension of a pd.Series of features using Sparse Random Projection.
+    -----------    
+    Return: a pd.Series of image features
+    """
+    X = np.stack(series)
+    X_tr = model.transform(X)
+    return pd.Series(X_tr.tolist())
+
+@pandas_udf('array<float>')
+def reduce_udf(batch_iter: Iterator[pd.Series]) -> Iterator[pd.Series]:
+    """This method is a Scalar Iterator pandas UDF
+    wrapping our dimensionality reduction function.
+    The decorator specifies that this returns a Spark DataFrame column
+    of type ArrayType(FloatType).
+    With Scalar Iterator pandas UDFs, we can load the model once and then re-use it
+    for multiple data batches.
+    This amortizes the overhead of loading big models.
+    """
+    model = bc_srp.value
+    for s in batch_iter:
+        yield dim_red_series(model, s)
+  
+if __name__ == '__main__':
     # Load images
     df_img = load_img(data_path)
     n_img = df_img.count()
+    print(f"number of images: {n_img}")
     # Get labels
     regex = r'(.*)/(.*[a-zA-Z])(.*)/'
     df_img = df_img.withColumn('label', regexp_extract('path', regex, 2))
-     # Get image features via transfert learning
+    # Get image features via transfert learning
+    model = MobileNetV2(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
+    bc_model_weights = sc.broadcast(model.get_weights())
     df_features = df_img.select(
         'label',
         featurize_udf('content').alias('features')
     )
-    # Transform features to a vector type
-    arr_to_vec_udf = udf(lambda a: Vectors.dense(a), VectorUDT())
-    df_vec = df_features.select(
+    # Create a sparse dummy array to fit the Sparse Random Projection
+    # It enables to broadcast the fitted sparse random projection
+    n_features = len(df_features.first()['features'])
+    dummy_X = scipy.sparse.csr_matrix((n_img, n_features), dtype=np.float32)
+    # Create the Sparse Random Projection model
+    k = johnson_lindenstrauss_min_dim(n_features, eps=0.1)
+    srp = SparseRandomProjection(n_components=k, random_state=42)
+    srp.fit(dummy_X)
+    bc_srp = sc.broadcast(srp)
+    # Reduce feature dimension with the Sparse Random Projection model
+    result = df_features.select(
         'label',
-        arr_to_vec_udf('features').alias('features')
+        reduce_udf('features').alias('features')
     )
-    df_vec.show(5)
-    # Scale data
-    scaler = StandardScaler(
-        withMean=True,
-        withStd=False,
-        inputCol='features',
-        outputCol='scaled_features'
-    )
-    scaler_model = scaler.fit(df_vec)
-    df_scaled = scaler_model.transform(df_vec).select(['label', 'scaled_features'])
-    df_scaled.show(5)
-    # # Run PCA with all components
-    # n_features = 7 * 7 * 1280
-    # n = min(n_img, n_features)
-    # pca = PCA(k=n, inputCol='features', outputCol='pca_features')
-    # pca_model = pca.fit(df_scaled)
-    # # Get the right number of components to keep 95% of the variance
-    # cumsum = np.cumsum(pca_model.explainedVariance)
-    # d = np.argmax(cumsum >= 0.95) + 1
-    # print(f"Number of principal components to keep : {d}")
-    # pca_model.setK(d)
-    # result = pca_model.transform(df_scaled).select('label', 'pca_features')
     # Save results
-    df_scaled.write.mode("overwrite").parquet(output_path)   
-
-if __name__ == '__main__':
-    main()
+    result.coalesce(1).write.mode("overwrite").parquet(result_path)
+    print("Data have been successfully saved")
