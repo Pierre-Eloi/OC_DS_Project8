@@ -1,5 +1,12 @@
 [
     {
+        "Classification": "jupyter-s3-conf",
+        "Properties": {
+            "s3.persistence.bucket": "per-oc-project8",
+            "s3.persistence.enabled": "true"
+        }
+    },
+    {
         "Classification": "spark-defaults",
         "Properties": {
             "spark.driver.memory": "3G",
