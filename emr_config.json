@@ -1,24 +1,10 @@
 [
     {
-        "classification":"jupyter-s3-conf",
-        "properties":{
-            "s3.persistence.bucket":"per-oc-project8",
-            "s3.persistence.enabled":"true"
-        }
-    },
-    {
         "Classification": "spark-defaults",
         "Properties": {
-            "spark.dynamicAllocation.enabled": "false",
-            "spark.driver.cores": "2",
-            "spark.executor.cores": "2",
-            "spark.driver.memory": "18000M",
-            "spark.executor.memory": "18000M",
-            "spark.driver.memoryOverhead": "3000M",
-            "spark.executor.memoryOverhead": "3000M",
-            "spark.executor.instances": "5",
-            "spark.default.parallelism": "20"
-            }
+            "spark.driver.memory": "3G",
+            "spark.executor.memory": "3G",
+            "spark.executor.cores": "1"
+        } 
     }
 ]
-
