@@ -13,10 +13,6 @@ new_user_credentials-2.csv
 # Data
 dataset/
 
-# AWS
-secrets.txt
-
-# old files
-DS_Project8_ragetly_old.ipynb
-p8_local.ipynb
+# other folders
 P8_tutorial/
+deliverables/
