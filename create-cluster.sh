@@ -1,0 +1,15 @@
+aws emr create-cluster \
+ --name "P8_Fruits" \
+ --log-uri "s3n://per-oc-logbucket/EMRClusterLogs/" \
+ --release-label "emr-6.9.0" \
+ --service-role "EMR_DefaultRole" \
+ --ec2-attributes '{"InstanceProfile":"EMR_EC2_DefaultRole","EmrManagedMasterSecurityGroup":"sg-0233037172a4b8149","EmrManagedSlaveSecurityGroup":"sg-01036062ebd37ce0f","KeyName":"per-ec2","AdditionalMasterSecurityGroups":[],"AdditionalSlaveSecurityGroups":[],"SubnetId":"subnet-01cc38d2d661b229d"}' \
+ --applications Name=Ganglia Name=Spark \
+ --configurations '[{"Classification":"spark-defaults","Properties":{"spark.driver.memory":"20G","spark.executor.cores":"4","spark.executor.memory":"20G"}}]' \
+ --instance-groups '[{"InstanceCount":4,"InstanceGroupType":"CORE","Name":"Core - 2","InstanceType":"r5.xlarge","EbsConfiguration":{"EbsBlockDeviceConfigs":[{"VolumeSpecification":{"VolumeType":"gp2","SizeInGB":32},"VolumesPerInstance":2}],"EbsOptimized":true}},{"InstanceCount":1,"InstanceGroupType":"MASTER","Name":"Master - 1","InstanceType":"r5.xlarge","EbsConfiguration":{"EbsBlockDeviceConfigs":[{"VolumeSpecification":{"VolumeType":"gp2","SizeInGB":32},"VolumesPerInstance":2}],"EbsOptimized":true}}]' \
+ --bootstrap-actions '[{"Args":[],"Name":"Custom action","Path":"s3://per-oc-project8/bootstrap-emr.sh"}]' \
+ --scale-down-behavior "TERMINATE_AT_TASK_COMPLETION" \
+ --ebs-root-volume-size "10" \
+ --auto-termination-policy '{"IdleTimeout":3600}' \
+ --os-release-label "2.0.20221210.1" \
+ --region "eu-west-1"
