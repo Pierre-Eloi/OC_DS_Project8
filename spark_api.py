@@ -116,7 +116,7 @@ def reduce_udf(batch_iter: Iterator[pd.Series]) -> Iterator[pd.Series]:
   
 if __name__ == '__main__':
     # Load images
-    df_img = load_img(data_path)
+    df_img = load_img(data_path).coalesce(16)
     n_img = df_img.count()
     print(f"number of images: {n_img}")
     # Get labels
